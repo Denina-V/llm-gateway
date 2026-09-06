@@ -39,19 +39,36 @@ jobs:
         run: docker build -t llm-gateway:ci .
 
       # A green unit-test suite says nothing about whether the image starts, so
-      # boot it and require a real 200 from the running container.
+      # boot it and require real answers out of the running container.
       - name: Boot the container and check it serves
         run: |
           docker run -d --name gw -p 8080:8080 llm-gateway:ci
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/healthz > /dev/null; then break; fi
+            curl -sf http://localhost:8080/healthz > /dev/null && break
             sleep 1
           done
+
           curl -sf http://localhost:8080/healthz | tee /dev/stderr | grep -q '"status"'
-          curl -sf http://localhost:8080/metrics | grep -q gateway_requests_total
+          curl -sf http://localhost:8080/readyz  | tee /dev/stderr | grep -q '"ready": *true'
+
+          # Serve a real request before scraping. A labelled Prometheus counter
+          # that has never been incremented may not be exported at all, so
+          # asserting on a cold /metrics tests the client library's rendering
+          # rather than the gateway -- and does it differently per version.
           curl -sf -X POST http://localhost:8080/v1/completions \
             -H 'Authorization: Bearer sk-local-research' \
             -H 'Content-Type: application/json' \
             -d '{"model":"mock-small","messages":[{"role":"user","content":"ci smoke test"}]}' \
             | tee /dev/stderr | grep -q '"content"'
-          docker rm -f gw
+
+          curl -sf http://localhost:8080/metrics \
+            | grep -E 'gateway_requests_total\{.*outcome="ok".*\} 1' \
+            || { echo "the completion did not register in /metrics"; exit 1; }
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs gw
+
+      - name: Stop the container
+        if: always()
+        run: docker rm -f gw || true
