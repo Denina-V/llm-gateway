@@ -20,10 +20,15 @@ FROM python:3.12-slim AS runtime
 RUN useradd --create-home --uid 10001 gateway
 COPY --from=builder /opt/venv /opt/venv
 
+# GATEWAY_CONFIG points the app at the config copied in below. Without it the
+# image ships a config it never reads: auth is on with zero keys loaded, and
+# every request 401s. No unit test can catch that -- the bug is in the image,
+# not in the code -- which is why CI boots the container and posts a request.
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    GATEWAY_PROVIDER=mock
+    GATEWAY_PROVIDER=mock \
+    GATEWAY_CONFIG=/app/config.yaml
 
 WORKDIR /app
 COPY --chown=gateway:gateway config.example.yaml /app/config.yaml
