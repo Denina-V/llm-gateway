@@ -183,8 +183,11 @@ Read the last two rows together: against a 25 ms upstream, a cacheable workload
 **roughly doubles throughput and halves p50** — and every one of those hits is a
 provider call that was never billed.
 
-The latencies include queueing at 50 in-flight requests; they are not
-single-request service times. All 6,000 requests returned `200`.
+Two caveats, because a table of numbers invites more trust than one run earns.
+The latencies include queueing at 50 in-flight requests — they are not
+single-request service times. And this is **one representative run on a laptop**:
+repeat it and throughput moves by roughly ±10%. The *ratio* is the stable part
+and the only claim worth making. All 6,000 requests returned `200`.
 
 ## Tested
 
