@@ -1,0 +1,24 @@
+# `docker compose up` gives you the gateway plus a Prometheus already scraping
+# it -- the metrics story is checkable, not just claimed.
+services:
+  gateway:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      GATEWAY_PROVIDER: mock          # set to `anthropic` and supply a key for the real thing
+      GATEWAY_CONFIG: /app/config.yaml
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8080/healthz',timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      gateway:
+        condition: service_healthy

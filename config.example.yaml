@@ -1,0 +1,46 @@
+# Copy to config.yaml and point GATEWAY_CONFIG at it.
+# Anything here can be overridden by an environment variable at run time, so one
+# image can serve every environment.
+
+provider: mock            # mock | anthropic
+require_auth: true
+request_timeout_s: 30
+max_attempts: 3
+
+cache:
+  enabled: true
+  ttl_s: 300
+  max_entries: 1024
+
+breaker:
+  failure_threshold: 5
+  reset_timeout_s: 20
+
+# Per-key policy. `rps`/`burst` size the token bucket; `budget_usd` is a hard
+# ceiling enforced by reservation before each upstream call.
+api_keys:
+  - key_id: team-research
+    secret: sk-local-research
+    budget_usd: 25.00
+    rps: 5
+    burst: 10
+  - key_id: team-batch
+    secret: sk-local-batch
+    budget_usd: 100.00
+    rps: 20
+    burst: 50
+  - key_id: team-demo
+    secret: sk-local-demo
+    budget_usd: 0.50       # deliberately tiny, so budget 402s are easy to demo
+    rps: 50                # loose on purpose: this key demonstrates the budget,
+    burst: 100             # and a tight limiter would 429 before the budget bites
+
+# Overrides the built-in table. Treat this as the source of truth for anything
+# you bill against -- vendor list prices change.
+pricing:
+  claude-opus-5:
+    input_per_mtok: 5.00
+    output_per_mtok: 25.00
+  claude-sonnet-5:
+    input_per_mtok: 2.00
+    output_per_mtok: 10.00

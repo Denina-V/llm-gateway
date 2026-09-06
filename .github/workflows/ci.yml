@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the current release. Testing only one of them means
+        # finding out about the other from a user.
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev,anthropic]"
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Test
+        run: pytest -q --cov=gateway --cov-report=term-missing --cov-fail-under=85
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t llm-gateway:ci .
+
+      # A green unit-test suite says nothing about whether the image starts, so
+      # boot it and require a real 200 from the running container.
+      - name: Boot the container and check it serves
+        run: |
+          docker run -d --name gw -p 8080:8080 llm-gateway:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf http://localhost:8080/healthz | tee /dev/stderr | grep -q '"status"'
+          curl -sf http://localhost:8080/metrics | grep -q gateway_requests_total
+          curl -sf -X POST http://localhost:8080/v1/completions \
+            -H 'Authorization: Bearer sk-local-research' \
+            -H 'Content-Type: application/json' \
+            -d '{"model":"mock-small","messages":[{"role":"user","content":"ci smoke test"}]}' \
+            | tee /dev/stderr | grep -q '"content"'
+          docker rm -f gw
